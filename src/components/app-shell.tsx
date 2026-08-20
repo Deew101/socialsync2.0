@@ -1,4 +1,4 @@
-import { Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
+import { Link, Navigate, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
   BarChart3,
   Bell,
@@ -46,9 +46,8 @@ export function AppShell() {
   useEffect(() => {
     if (isConfigured && !loading && !user) {
       toast.info("Please sign in to access your workspace.");
-      navigate({ to: "/login" });
     }
-  }, [user, loading, isConfigured, navigate]);
+  }, [user, loading, isConfigured]);
 
   const handleSignOut = async () => {
     await signOut();
@@ -67,6 +66,10 @@ export function AppShell() {
         </div>
       </div>
     );
+  }
+
+  if (isConfigured && !loading && !user) {
+    return <Navigate to="/login" />;
   }
 
   return (
