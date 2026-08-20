@@ -27,7 +27,10 @@ export function initiateLinkedInOAuth(userId: string) {
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL ?? "";
   const redirectUri = `${supabaseUrl}/functions/v1/linkedin-callback`;
 
-  const scope = encodeURIComponent("openid profile email w_member_social");
+  // Use only openid profile email for initial connection.
+  // w_member_social (posting) scope requires LinkedIn's "Share on LinkedIn"
+  // product to be fully approved — add it back once LinkedIn approves the app.
+  const scope = encodeURIComponent("openid profile email");
   const authUrl =
     `https://www.linkedin.com/oauth/v2/authorization` +
     `?response_type=code` +
