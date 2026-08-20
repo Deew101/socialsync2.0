@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>SocialSync</title>
+    <script type="text/javascript">
+      // Redirect 404 subpath to hash route
+      var path = window.location.pathname.replace(/^\/socialsync101/, '');
+      if (path && path !== '/') {
+        window.location.replace('/socialsync101/#' + path + window.location.search);
+      } else {
+        window.location.replace('/socialsync101/#/');
+      }
+    </script>
+  </head>
+  <body>
+  </body>
+</html>
