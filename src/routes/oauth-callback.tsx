@@ -15,8 +15,15 @@ function OAuthCallbackPage() {
   const [platform, setPlatform] = useState("");
 
   useEffect(() => {
-    // Parse the URL — Edge Functions redirect here with query params
-    const params = new URLSearchParams(window.location.search);
+    // With hash-based routing the full URL looks like:
+    //   https://host/#/oauth-callback?platform=linkedin&success=true
+    // window.location.search is empty — params live inside the hash fragment.
+    const hash = window.location.hash; // e.g. "#/oauth-callback?platform=linkedin&success=true"
+    const queryStart = hash.indexOf("?");
+    const params = queryStart >= 0
+      ? new URLSearchParams(hash.slice(queryStart))
+      : new URLSearchParams(window.location.search); // fallback for non-hash deployments
+
     const error = params.get("error");
     const errorDescription = params.get("error_description");
     const success = params.get("success");

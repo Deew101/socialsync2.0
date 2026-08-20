@@ -34,6 +34,7 @@ Deno.serve(async (req: Request) => {
     new Response(null, {
       status: 302,
       headers: {
+        // Hash-routed app: params must be inside the hash fragment
         Location: `${APP_ORIGIN}/#/oauth-callback?platform=linkedin&error=${encodeURIComponent(msg)}`,
       },
     });
@@ -152,7 +153,7 @@ Deno.serve(async (req: Request) => {
     }
   }
 
-  // 6. Redirect back to SocialSync app with real display name
+  // 6. Redirect back to SocialSync app — params go inside hash fragment (hash router)
   return new Response(null, {
     status: 302,
     headers: {
