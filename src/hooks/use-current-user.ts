@@ -1,7 +1,5 @@
-import { useEffect, useState } from "react";
+import { useAuth } from "./use-auth";
 import { currentUser as defaultUser } from "@/lib/mock-data";
-
-const STORAGE_KEY = "socialsync.currentUser";
 
 export type CurrentUser = {
   name: string;
@@ -23,43 +21,31 @@ export function initialsFromName(name: string) {
   );
 }
 
-export function saveCurrentUser(user: Partial<CurrentUser> & { name: string; email: string }) {
-  const full: CurrentUser = {
-    name: user.name,
-    email: user.email,
-    initials: user.initials ?? initialsFromName(user.name),
-    role: user.role ?? defaultUser.role,
-  };
-  if (typeof window !== "undefined") {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(full));
-    window.dispatchEvent(new Event("socialsync:user"));
-  }
-  return full;
-}
-
-function readUser(): CurrentUser {
-  if (typeof window === "undefined") return defaultUser;
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return defaultUser;
-    const parsed = JSON.parse(raw) as CurrentUser;
-    return { ...defaultUser, ...parsed };
-  } catch {
-    return defaultUser;
-  }
-}
-
 export function useCurrentUser(): CurrentUser {
-  const [user, setUser] = useState<CurrentUser>(defaultUser);
-  useEffect(() => {
-    setUser(readUser());
-    const onChange = () => setUser(readUser());
-    window.addEventListener("socialsync:user", onChange);
-    window.addEventListener("storage", onChange);
-    return () => {
-      window.removeEventListener("socialsync:user", onChange);
-      window.removeEventListener("storage", onChange);
+  const { profile, user } = useAuth();
+
+  if (profile) {
+    return {
+      name: profile.full_name,
+      initials: profile.initials,
+      email: profile.email,
+      role: profile.role,
     };
-  }, []);
-  return user;
+  }
+
+  if (user) {
+    const name =
+      user.user_metadata?.full_name ||
+      user.user_metadata?.name ||
+      user.email?.split("@")[0] ||
+      "User";
+    return {
+      name,
+      initials: initialsFromName(name),
+      email: user.email || "",
+      role: "Content Manager",
+    };
+  }
+
+  return defaultUser;
 }

@@ -1,4 +1,4 @@
-import { Link, Outlet, useRouterState } from "@tanstack/react-router";
+import { Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
   BarChart3,
   Bell,
@@ -14,11 +14,14 @@ import {
   Sparkles,
   Users2,
 } from "lucide-react";
+import { useEffect } from "react";
+import { toast } from "sonner";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
+import { useAuth } from "@/hooks/use-auth";
 import { useCurrentUser } from "@/hooks/use-current-user";
 
 const navItems = [
@@ -37,6 +40,34 @@ const navItems = [
 export function AppShell() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const currentUser = useCurrentUser();
+  const { user, loading, isConfigured, signOut } = useAuth();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (isConfigured && !loading && !user) {
+      toast.info("Please sign in to access your workspace.");
+      navigate({ to: "/login" });
+    }
+  }, [user, loading, isConfigured, navigate]);
+
+  const handleSignOut = async () => {
+    await signOut();
+    toast.success("Signed out successfully");
+    navigate({ to: "/login" });
+  };
+
+  if (isConfigured && loading) {
+    return (
+      <div className="grid h-screen w-full place-items-center bg-background text-foreground">
+        <div className="flex flex-col items-center gap-3">
+          <div className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-primary shadow-glow animate-pulse">
+            <Sparkles className="h-5 w-5 text-white" />
+          </div>
+          <p className="text-sm font-medium text-muted-foreground">Loading workspace…</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -48,7 +79,7 @@ export function AppShell() {
               <Sparkles className="h-4 w-4 text-white" />
             </div>
             <span className="text-lg font-bold tracking-tight">
-              Social<span className="text-primary">Sync</span>
+              Social<span className="text-primary">Sync 2.0</span>
             </span>
           </div>
           <Separator />
@@ -91,13 +122,14 @@ export function AppShell() {
                   {currentUser.role}
                 </p>
               </div>
-              <Link
-                to="/"
+              <button
+                type="button"
+                onClick={handleSignOut}
                 aria-label="Sign out"
-                className="rounded-md p-1.5 text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
+                className="rounded-md p-1.5 text-muted-foreground hover:bg-sidebar-accent hover:text-foreground transition-colors"
               >
                 <LogOut className="h-4 w-4" />
-              </Link>
+              </button>
             </div>
           </div>
         </aside>

@@ -11,67 +11,88 @@ import {
   Twitter,
   Users2,
   XCircle,
+  Loader2,
 } from "lucide-react";
+import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PlatformBadge } from "@/lib/platform-icons";
-import {
-  connectedAccounts,
-  draftPosts,
-  publishedPosts,
-  recentActivity,
-  upcomingPosts,
-} from "@/lib/mock-data";
-import { useCurrentUser } from "@/hooks/use-current-user";
+import { useAuth } from "@/hooks/use-auth";
+import { fetchUserPosts, DBPost } from "@/lib/posts-service";
+import { fetchUserSocialAccounts, SocialAccountItem } from "@/lib/social-accounts-service";
+import { recentActivity } from "@/lib/mock-data";
 
 export const Route = createFileRoute("/_app/dashboard")({
-  head: () => ({ meta: [{ title: "Dashboard — SocialSync" }] }),
+  head: () => ({ meta: [{ title: "Dashboard — SocialSync 2.0" }] }),
   component: Dashboard,
 });
 
-const stats = [
-  {
-    label: "Scheduled",
-    icon: Calendar,
-    getValue: () => upcomingPosts.length.toString(),
-    delta: "Next: Today, 4:00 PM",
-    tone: "text-primary",
-  },
-  {
-    label: "Published",
-    icon: CheckCircle2,
-    getValue: () => publishedPosts.length + 180 + "",
-    delta: "+8.2% this week",
-    tone: "text-emerald-400",
-  },
-  {
-    label: "Drafts",
-    icon: FileText,
-    getValue: () => draftPosts.length.toString(),
-    delta: "2 need review",
-    tone: "text-amber-400",
-  },
-  {
-    label: "Accounts",
-    icon: Users2,
-    getValue: () => connectedAccounts.length.toString(),
-    delta: "All healthy",
-    tone: "text-muted-foreground",
-  },
-];
-
 function Dashboard() {
-  const currentUser = useCurrentUser();
+  const { user, profile } = useAuth();
+  const [posts, setPosts] = useState<DBPost[]>([]);
+  const [accounts, setAccounts] = useState<SocialAccountItem[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    Promise.all([
+      fetchUserPosts(user?.id),
+      fetchUserSocialAccounts(user?.id),
+    ])
+      .then(([postsData, accountsData]) => {
+        setPosts(postsData);
+        setAccounts(accountsData);
+      })
+      .finally(() => setLoading(false));
+  }, [user]);
+
+  const upcomingPosts = posts.filter((p) => p.status === "scheduled");
+  const publishedPosts = posts.filter((p) => p.status === "published");
+  const draftPosts = posts.filter((p) => p.status === "draft");
+
+  const displayName = profile?.full_name?.split(" ")[0] || user?.email?.split("@")[0] || "User";
+
+  const stats = [
+    {
+      label: "Scheduled",
+      icon: Calendar,
+      value: upcomingPosts.length.toString(),
+      delta: upcomingPosts.length > 0 ? `Next: ${upcomingPosts[0].scheduled_for ? upcomingPosts[0].scheduled_for.slice(5, 16) : "Tomorrow"}` : "None scheduled",
+      tone: "text-primary",
+    },
+    {
+      label: "Published",
+      icon: CheckCircle2,
+      value: publishedPosts.length.toString(),
+      delta: "+8.2% this week",
+      tone: "text-emerald-400",
+    },
+    {
+      label: "Drafts",
+      icon: FileText,
+      value: draftPosts.length.toString(),
+      delta: `${draftPosts.length} ready to polish`,
+      tone: "text-amber-400",
+    },
+    {
+      label: "Accounts",
+      icon: Users2,
+      value: accounts.length.toString(),
+      delta: `${accounts.filter((a) => a.connected).length} active`,
+      tone: "text-muted-foreground",
+    },
+  ];
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">
-            Welcome back, {currentUser.name.split(" ")[0]}.
+            Welcome back, {displayName}.
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Your social presence is growing 12% faster than last month.
+            SocialSync 2.0 command center — database connected and multi-tenant protected.
           </p>
         </div>
         <div className="flex gap-2">
@@ -105,7 +126,7 @@ function Dashboard() {
                   <Icon className="h-4 w-4 text-muted-foreground" />
                 </div>
                 <p className="mt-2 text-3xl font-bold tracking-tight">
-                  {s.getValue()}
+                  {loading ? <Loader2 className="h-6 w-6 animate-spin text-primary" /> : s.value}
                 </p>
                 <p className={`mt-1 text-xs ${s.tone}`}>{s.delta}</p>
               </CardContent>
@@ -118,7 +139,7 @@ function Dashboard() {
         {/* Upcoming */}
         <Card className="border-border bg-card lg:col-span-2">
           <CardHeader className="flex flex-row items-center justify-between space-y-0">
-            <CardTitle className="text-base">Upcoming schedule</CardTitle>
+            <CardTitle className="text-base">Upcoming schedule ({upcomingPosts.length})</CardTitle>
             <Link
               to="/schedule"
               className="text-xs font-medium text-primary hover:underline"
@@ -127,28 +148,42 @@ function Dashboard() {
             </Link>
           </CardHeader>
           <CardContent className="space-y-3">
-            {upcomingPosts.map((p) => (
-              <div
-                key={p.id}
-                className="flex items-center gap-4 rounded-xl border border-border/60 bg-background/40 p-4 transition-colors hover:border-primary/30"
-              >
-                <div className="h-12 w-12 shrink-0 rounded-lg bg-gradient-primary/30 ring-1 ring-primary/20" />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">{p.content}</p>
-                  <div className="mt-1.5 flex items-center gap-2">
-                    {p.platforms.map((pl) => (
-                      <PlatformBadge key={pl} platform={pl} />
-                    ))}
-                    <span className="text-xs text-muted-foreground">
-                      {p.scheduledFor?.replace("T", " · ").slice(5, 16)}
-                    </span>
-                  </div>
-                </div>
-                <Button variant="ghost" size="sm">
-                  Edit
-                </Button>
+            {loading ? (
+              <div className="flex items-center justify-center py-6 text-sm text-muted-foreground">
+                <Loader2 className="mr-2 h-4 w-4 animate-spin text-primary" /> Loading queue…
               </div>
-            ))}
+            ) : upcomingPosts.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
+                No upcoming scheduled posts. Compose a new post to schedule.
+              </div>
+            ) : (
+              upcomingPosts.slice(0, 3).map((p) => (
+                <div
+                  key={p.id}
+                  className="flex items-center gap-4 rounded-xl border border-border/60 bg-background/40 p-4 transition-colors hover:border-primary/30"
+                >
+                  <div className="h-10 w-10 shrink-0 rounded-lg bg-gradient-primary/30 ring-1 ring-primary/20 flex items-center justify-center font-bold text-xs text-primary">
+                    SS
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium">{p.content}</p>
+                    <div className="mt-1.5 flex items-center gap-2">
+                      {p.platforms.map((pl) => (
+                        <PlatformBadge key={pl} platform={pl} />
+                      ))}
+                      <span className="text-xs text-muted-foreground">
+                        {p.scheduled_for ? p.scheduled_for.replace("T", " · ").slice(5, 16) : "Scheduled"}
+                      </span>
+                    </div>
+                  </div>
+                  <Link to="/compose">
+                    <Button variant="ghost" size="sm">
+                      Edit
+                    </Button>
+                  </Link>
+                </div>
+              ))
+            )}
           </CardContent>
         </Card>
 
@@ -199,7 +234,7 @@ function Dashboard() {
         {/* Connected accounts */}
         <Card className="border-border bg-card lg:col-span-2">
           <CardHeader className="flex flex-row items-center justify-between space-y-0">
-            <CardTitle className="text-base">Connected accounts</CardTitle>
+            <CardTitle className="text-base">Connected accounts ({accounts.length})</CardTitle>
             <Link
               to="/accounts"
               className="text-xs font-medium text-primary hover:underline"
@@ -208,7 +243,7 @@ function Dashboard() {
             </Link>
           </CardHeader>
           <CardContent className="grid gap-3 sm:grid-cols-3">
-            {connectedAccounts.map((a) => {
+            {accounts.map((a) => {
               const Icon =
                 a.platform === "instagram"
                   ? Instagram
@@ -225,7 +260,7 @@ function Dashboard() {
                     <span className="text-sm font-medium">{a.handle}</span>
                   </div>
                   <p className="mt-2 text-xs text-muted-foreground">
-                    {a.followers.toLocaleString()} followers
+                    {a.followers_count.toLocaleString()} followers
                   </p>
                 </div>
               );

@@ -1,26 +1,76 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Calendar, Copy, Send, Trash2 } from "lucide-react";
+import { Calendar, Copy, Send, Trash2, Loader2 } from "lucide-react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { PlatformBadge } from "@/lib/platform-icons";
-import { draftPosts } from "@/lib/mock-data";
+import { useAuth } from "@/hooks/use-auth";
+import {
+  fetchUserPosts,
+  deletePostFromDB,
+  updatePostInDB,
+  DBPost,
+} from "@/lib/posts-service";
 
 export const Route = createFileRoute("/_app/drafts")({
-  head: () => ({ meta: [{ title: "Drafts — SocialSync" }] }),
+  head: () => ({ meta: [{ title: "Drafts — SocialSync 2.0" }] }),
   component: Drafts,
 });
 
 function Drafts() {
+  const { user } = useAuth();
+  const [drafts, setDrafts] = useState<DBPost[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const loadDrafts = async () => {
+    setLoading(true);
+    try {
+      const data = await fetchUserPosts(user?.id);
+      setDrafts(data.filter((p) => p.status === "draft"));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadDrafts();
+  }, [user]);
+
+  const handleDelete = async (postId: string) => {
+    if (user?.id) {
+      const ok = await deletePostFromDB(postId, user.id);
+      if (ok) {
+        toast.success("Draft deleted");
+        setDrafts((prev) => prev.filter((d) => d.id !== postId));
+      } else {
+        toast.error("Failed to delete draft.");
+      }
+    } else {
+      toast.success("Draft removed");
+      setDrafts((prev) => prev.filter((d) => d.id !== postId));
+    }
+  };
+
+  const handlePublishDraft = async (post: DBPost) => {
+    if (user?.id) {
+      await updatePostInDB(post.id, user.id, {
+        status: "published",
+        published_at: new Date().toISOString(),
+      });
+      toast.success("Draft published successfully!");
+      await loadDrafts();
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-end justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Drafts</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            {draftPosts.length} draft{draftPosts.length !== 1 && "s"} — finish
-            what you started.
+            {drafts.length} draft{drafts.length !== 1 && "s"} saved in your SocialSync 2.0 workspace.
           </p>
         </div>
         <Link to="/compose">
@@ -28,11 +78,16 @@ function Drafts() {
         </Link>
       </div>
 
-      {draftPosts.length === 0 ? (
+      {loading ? (
+        <div className="flex items-center justify-center py-16 text-sm text-muted-foreground">
+          <Loader2 className="mr-2 h-4 w-4 animate-spin text-primary" />
+          Loading saved drafts from database…
+        </div>
+      ) : drafts.length === 0 ? (
         <EmptyState />
       ) : (
         <div className="grid gap-4 md:grid-cols-2">
-          {draftPosts.map((p) => (
+          {drafts.map((p) => (
             <Card key={p.id} className="border-border bg-card">
               <CardHeader className="pb-3">
                 <div className="flex items-center gap-2">
@@ -47,29 +102,27 @@ function Drafts() {
                   <Button
                     size="sm"
                     className="bg-gradient-primary text-primary-foreground shadow-glow hover:opacity-95"
-                    onClick={() => toast.success("Published")}
+                    onClick={() => handlePublishDraft(p)}
                   >
                     <Send className="mr-2 h-3.5 w-3.5" /> Publish
                   </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => toast.success("Scheduled")}
-                  >
-                    <Calendar className="mr-2 h-3.5 w-3.5" /> Schedule
-                  </Button>
+                  <Link to="/compose">
+                    <Button size="sm" variant="outline">
+                      <Calendar className="mr-2 h-3.5 w-3.5" /> Edit / Schedule
+                    </Button>
+                  </Link>
                   <Button
                     size="sm"
                     variant="ghost"
-                    onClick={() => toast.success("Duplicated")}
+                    onClick={() => toast.success("Draft content copied to clipboard")}
                   >
-                    <Copy className="mr-2 h-3.5 w-3.5" /> Duplicate
+                    <Copy className="mr-2 h-3.5 w-3.5" /> Copy
                   </Button>
                   <Button
                     size="sm"
                     variant="ghost"
                     className="text-destructive hover:text-destructive"
-                    onClick={() => toast.success("Deleted")}
+                    onClick={() => handleDelete(p.id)}
                   >
                     <Trash2 className="mr-2 h-3.5 w-3.5" /> Delete
                   </Button>
