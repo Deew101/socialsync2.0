@@ -25,8 +25,7 @@ function ForgotPage() {
 
     try {
       if (isSupabaseConfigured()) {
-        const fullBaseUrl = window.location.href.split("#")[0];
-        const redirectUrl = `${fullBaseUrl}#/settings`;
+        const redirectUrl = `${window.location.origin}/socialsync2.0/#/settings`;
 
         const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
           redirectTo: redirectUrl,
