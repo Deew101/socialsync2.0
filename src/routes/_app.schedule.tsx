@@ -24,8 +24,9 @@ function Schedule() {
     setLoading(true);
     fetchUserPosts(user?.id)
       .then((data) => {
-        setScheduledPosts(data.filter((p) => p.status === "scheduled"));
+        setScheduledPosts((Array.isArray(data) ? data : []).filter((p) => p && p.status === "scheduled"));
       })
+      .catch((err) => console.error("Schedule error:", err))
       .finally(() => setLoading(false));
   }, [user]);
 
@@ -99,7 +100,7 @@ function Schedule() {
                           >
                             <p className="line-clamp-2">{p.content}</p>
                             <div className="mt-1 flex gap-1">
-                              {p.platforms.map((pl) => (
+                              {(p.platforms || []).map((pl) => (
                                 <PlatformBadge key={pl} platform={pl} />
                               ))}
                             </div>
@@ -141,11 +142,11 @@ function Schedule() {
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium">{p.content}</p>
                   <p className="mt-0.5 text-xs text-muted-foreground">
-                    Scheduled for: {p.scheduled_for ? p.scheduled_for.replace("T", " · ").slice(0, 16) : "Tomorrow, 10:00 AM"}
+                    Scheduled for: {typeof p.scheduled_for === "string" ? p.scheduled_for.replace("T", " · ").slice(0, 16) : "Tomorrow, 10:00 AM"}
                   </p>
                 </div>
                 <div className="flex gap-1">
-                  {p.platforms.map((pl) => (
+                  {(p.platforms || []).map((pl) => (
                     <PlatformBadge key={pl} platform={pl} />
                   ))}
                 </div>

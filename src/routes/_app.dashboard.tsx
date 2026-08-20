@@ -41,24 +41,33 @@ function Dashboard() {
       fetchUserSocialAccounts(user?.id),
     ])
       .then(([postsData, accountsData]) => {
-        setPosts(postsData);
-        setAccounts(accountsData);
+        setPosts(Array.isArray(postsData) ? postsData : []);
+        setAccounts(Array.isArray(accountsData) ? accountsData : []);
+      })
+      .catch((err) => {
+        console.error("Dashboard data load error:", err);
       })
       .finally(() => setLoading(false));
   }, [user]);
 
-  const upcomingPosts = posts.filter((p) => p.status === "scheduled");
-  const publishedPosts = posts.filter((p) => p.status === "published");
-  const draftPosts = posts.filter((p) => p.status === "draft");
+  const upcomingPosts = posts.filter((p) => p && p.status === "scheduled");
+  const publishedPosts = posts.filter((p) => p && p.status === "published");
+  const draftPosts = posts.filter((p) => p && p.status === "draft");
 
-  const displayName = profile?.full_name?.split(" ")[0] || user?.email?.split("@")[0] || "User";
+  const displayName =
+    (profile?.full_name && typeof profile.full_name === "string" ? profile.full_name.split(" ")[0] : "") ||
+    (user?.email && typeof user.email === "string" ? user.email.split("@")[0] : "") ||
+    "User";
 
   const stats = [
     {
       label: "Scheduled",
       icon: Calendar,
       value: upcomingPosts.length.toString(),
-      delta: upcomingPosts.length > 0 ? `Next: ${upcomingPosts[0].scheduled_for ? upcomingPosts[0].scheduled_for.slice(5, 16) : "Tomorrow"}` : "None scheduled",
+      delta:
+        upcomingPosts.length > 0 && typeof upcomingPosts[0]?.scheduled_for === "string"
+          ? `Next: ${upcomingPosts[0].scheduled_for.replace("T", " ").slice(5, 16)}`
+          : "None scheduled",
       tone: "text-primary",
     },
     {
@@ -79,7 +88,7 @@ function Dashboard() {
       label: "Accounts",
       icon: Users2,
       value: accounts.length.toString(),
-      delta: `${accounts.filter((a) => a.connected).length} active`,
+      delta: `${accounts.filter((a) => a && a.connected).length} active`,
       tone: "text-muted-foreground",
     },
   ];
@@ -168,11 +177,11 @@ function Dashboard() {
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium">{p.content}</p>
                     <div className="mt-1.5 flex items-center gap-2">
-                      {p.platforms.map((pl) => (
+                      {(p.platforms || []).map((pl) => (
                         <PlatformBadge key={pl} platform={pl} />
                       ))}
                       <span className="text-xs text-muted-foreground">
-                        {p.scheduled_for ? p.scheduled_for.replace("T", " · ").slice(5, 16) : "Scheduled"}
+                        {typeof p.scheduled_for === "string" ? p.scheduled_for.replace("T", " · ").slice(5, 16) : "Scheduled"}
                       </span>
                     </div>
                   </div>
@@ -260,7 +269,7 @@ function Dashboard() {
                     <span className="text-sm font-medium">{a.handle}</span>
                   </div>
                   <p className="mt-2 text-xs text-muted-foreground">
-                    {a.followers_count.toLocaleString()} followers
+                    {(a.followers_count || 0).toLocaleString()} followers
                   </p>
                 </div>
               );
