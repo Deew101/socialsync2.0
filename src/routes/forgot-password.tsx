@@ -25,8 +25,11 @@ function ForgotPage() {
 
     try {
       if (isSupabaseConfigured()) {
+        const fullBaseUrl = window.location.href.split("#")[0];
+        const redirectUrl = `${fullBaseUrl}#/settings`;
+
         const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-          redirectTo: `${window.location.origin}/settings`,
+          redirectTo: redirectUrl,
         });
         if (error) {
           toast.error(error.message);
