@@ -1,74 +1,86 @@
 import { supabase, isSupabaseConfigured } from "./supabase";
 
-export interface LinkedInConfig {
-  clientId: string;
-  redirectUri: string;
+// ─── LinkedIn ──────────────────────────────────────────────────────────────────
+
+export function getLinkedInClientId(): string {
+  return import.meta.env.VITE_LINKEDIN_CLIENT_ID ?? "";
 }
 
-export function getLinkedInConfig(): LinkedInConfig {
-  const clientId =
-    import.meta.env.VITE_LINKEDIN_CLIENT_ID ||
-    "7890123456789"; // Configurable via environment variable
-  const redirectUri =
-    import.meta.env.VITE_LINKEDIN_REDIRECT_URI ||
-    `${window.location.origin}/oauth-callback`;
+/**
+ * Begins the LinkedIn OAuth 2.0 flow.
+ * The redirect URI points to the Supabase Edge Function which keeps the
+ * client_secret server-side. The state encodes platform + nonce + userId
+ * so the Edge Function knows which user to save the account against.
+ */
+export function initiateLinkedInOAuth(userId: string) {
+  const clientId = getLinkedInClientId();
+  if (!clientId) {
+    throw new Error(
+      "LinkedIn Client ID is not configured. Add VITE_LINKEDIN_CLIENT_ID to your GitHub Secrets."
+    );
+  }
 
-  return { clientId, redirectUri };
-}
+  const nonce = crypto.randomUUID().replace(/-/g, "").slice(0, 16);
+  const state = `linkedin:${nonce}:${userId}`;
+  sessionStorage.setItem("oauth_state", state);
 
-export function initiateLinkedInOAuth() {
-  const { clientId, redirectUri } = getLinkedInConfig();
-  const state = Math.random().toString(36).substring(2, 15);
-  sessionStorage.setItem("linkedin_oauth_state", state);
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL ?? "";
+  const redirectUri = `${supabaseUrl}/functions/v1/linkedin-callback`;
 
-  // Requested scopes: openid profile w_member_social (for posting)
-  const scope = encodeURIComponent("openid profile w_member_social");
-  const authUrl = `https://www.linkedin.com/oauth/v2/authorization?response_type=code&client_id=${clientId}&redirect_uri=${encodeURIComponent(
-    redirectUri
-  )}&state=${state}&scope=${scope}`;
+  const scope = encodeURIComponent("openid profile email w_member_social");
+  const authUrl =
+    `https://www.linkedin.com/oauth/v2/authorization` +
+    `?response_type=code` +
+    `&client_id=${encodeURIComponent(clientId)}` +
+    `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+    `&state=${encodeURIComponent(state)}` +
+    `&scope=${scope}`;
 
   window.location.href = authUrl;
 }
 
-export async function handleLinkedInCallback(code: string, state: string, userId: string) {
-  const savedState = sessionStorage.getItem("linkedin_oauth_state");
-  if (savedState && savedState !== state) {
-    throw new Error("Invalid OAuth state parameter. Security check failed.");
-  }
-  sessionStorage.removeItem("linkedin_oauth_state");
+// ─── Instagram ─────────────────────────────────────────────────────────────────
 
-  // Save connected account to Supabase social_accounts table
-  if (isSupabaseConfigured() && userId) {
-    const { data: existing } = await supabase
-      .from("social_accounts")
-      .select("id")
-      .eq("user_id", userId)
-      .eq("platform", "linkedin")
-      .single();
-
-    if (existing) {
-      await supabase
-        .from("social_accounts")
-        .update({
-          connected: true,
-          handle: "LinkedIn User",
-          account_name: "LinkedIn Connected Account",
-          access_token: `lnk_tok_${code.substring(0, 10)}`,
-          expires_at: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString(),
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", existing.id);
-    } else {
-      await supabase.from("social_accounts").insert({
-        user_id: userId,
-        platform: "linkedin",
-        handle: "LinkedIn User",
-        account_name: "LinkedIn Connected Account",
-        access_token: `lnk_tok_${code.substring(0, 10)}`,
-        expires_at: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString(),
-        connected: true,
-        followers_count: 1250,
-      });
-    }
-  }
+export function getMetaAppId(): string {
+  return import.meta.env.VITE_META_APP_ID ?? "";
 }
+
+/**
+ * Begins the Meta/Instagram OAuth 2.0 flow.
+ * Requires a Business or Creator Instagram account linked to a Facebook Page
+ * for Content Publishing API access.
+ */
+export function initiateInstagramOAuth(userId: string) {
+  const appId = getMetaAppId();
+  if (!appId) {
+    throw new Error(
+      "Meta App ID is not configured. Add VITE_META_APP_ID to your GitHub Secrets."
+    );
+  }
+
+  const nonce = crypto.randomUUID().replace(/-/g, "").slice(0, 16);
+  const state = `instagram:${nonce}:${userId}`;
+  sessionStorage.setItem("oauth_state", state);
+
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL ?? "";
+  const redirectUri = `${supabaseUrl}/functions/v1/instagram-callback`;
+
+  const scope = [
+    "instagram_basic",
+    "instagram_content_publish",
+    "pages_show_list",
+    "pages_read_engagement",
+  ].join(",");
+
+  const authUrl =
+    `https://www.facebook.com/v19.0/dialog/oauth` +
+    `?client_id=${encodeURIComponent(appId)}` +
+    `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+    `&state=${encodeURIComponent(state)}` +
+    `&scope=${encodeURIComponent(scope)}` +
+    `&response_type=code`;
+
+  window.location.href = authUrl;
+}
+
+// X/Twitter removed — posting requires a paid X API plan ($100/month minimum).
