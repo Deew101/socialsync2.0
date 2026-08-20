@@ -1,5 +1,6 @@
 import { useEffect, useState, createContext, useContext, ReactNode } from "react";
 import { User, Session } from "@supabase/supabase-js";
+import { toast } from "sonner";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 
 export type UserProfile = {
@@ -98,6 +99,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
+    // Check for auth errors in hash fragment (e.g. expired reset links)
+    const rawHash = window.location.hash || window.location.search;
+    if (rawHash.includes("error_code=") || rawHash.includes("error_description=")) {
+      const match = rawHash.match(/error_description=([^&]+)/);
+      const desc = match ? decodeURIComponent(match[1].replace(/\+/g, " ")) : "Email link is invalid or has expired";
+      
+      toast.error(`Auth Notice: ${desc}. Please request a new link.`);
+      
+      // Clean up hash and redirect to forgot-password route
+      window.history.replaceState(null, "", `${window.location.pathname}#/forgot-password`);
+    }
+
     if (!configured) {
       setLoading(false);
       return;
@@ -114,9 +127,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
+      (event, session) => {
         setSession(session);
         setUser(session?.user ?? null);
+
+        if (event === "PASSWORD_RECOVERY") {
+          toast.info("Password recovery session active. Please enter your new password below.");
+          window.location.hash = "#/settings";
+        }
+
         if (session?.user) {
           fetchProfile(session.user).finally(() => setLoading(false));
         } else {
