@@ -100,8 +100,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     // Only intercept hash-based auth errors (e.g. expired password-reset links).
-    // Do NOT intercept ?error_code= from OAuth callbacks — those are handled by
-    // Supabase automatically and should not redirect to forgot-password.
+    // OAuth errors (e.g. "Unable to exchange external code") should show a toast
+    // and redirect to login — NOT to forgot-password.
     const rawHash = window.location.hash;
     if (
       rawHash.includes("error_code=") ||
@@ -110,10 +110,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const match = rawHash.match(/error_description=([^&]+)/);
       const desc = match
         ? decodeURIComponent(match[1].replace(/\+/g, " "))
-        : "Email link is invalid or has expired";
+        : "Authentication failed";
 
-      toast.error(`Auth Notice: ${desc}. Please request a new link.`);
-      window.history.replaceState(null, "", `${window.location.pathname}#/forgot-password`);
+      const isOAuthError =
+        desc.toLowerCase().includes("exchange") ||
+        desc.toLowerCase().includes("external code") ||
+        rawHash.includes("error=server_error");
+
+      if (isOAuthError) {
+        toast.error(`Google sign-in failed: ${desc}. Please try again.`);
+        // Clean URL and redirect to login
+        window.history.replaceState(null, "", `${window.location.pathname}`);
+        window.location.hash = "#/login";
+      } else {
+        toast.error(`Auth Notice: ${desc}. Please request a new link.`);
+        window.history.replaceState(null, "", `${window.location.pathname}#/forgot-password`);
+      }
     }
 
     if (!configured) {
