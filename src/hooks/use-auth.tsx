@@ -99,15 +99,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
-    // Check for auth errors in hash fragment (e.g. expired reset links)
-    const rawHash = window.location.hash || window.location.search;
-    if (rawHash.includes("error_code=") || rawHash.includes("error_description=")) {
+    // Only intercept hash-based auth errors (e.g. expired password-reset links).
+    // Do NOT intercept ?error_code= from OAuth callbacks — those are handled by
+    // Supabase automatically and should not redirect to forgot-password.
+    const rawHash = window.location.hash;
+    if (
+      rawHash.includes("error_code=") ||
+      rawHash.includes("error_description=")
+    ) {
       const match = rawHash.match(/error_description=([^&]+)/);
-      const desc = match ? decodeURIComponent(match[1].replace(/\+/g, " ")) : "Email link is invalid or has expired";
-      
+      const desc = match
+        ? decodeURIComponent(match[1].replace(/\+/g, " "))
+        : "Email link is invalid or has expired";
+
       toast.error(`Auth Notice: ${desc}. Please request a new link.`);
-      
-      // Clean up hash and redirect to forgot-password route
       window.history.replaceState(null, "", `${window.location.pathname}#/forgot-password`);
     }
 
@@ -134,6 +139,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (event === "PASSWORD_RECOVERY") {
           toast.info("Password recovery session active. Please enter your new password below.");
           window.location.hash = "#/settings";
+        }
+
+        // After Google/OAuth sign-in, navigate to dashboard
+        if (event === "SIGNED_IN" && session?.user) {
+          // Only redirect if we're on the root or a bare callback URL (not already on a route)
+          const currentHash = window.location.hash;
+          if (!currentHash || currentHash === "#" || currentHash === "#/") {
+            window.location.hash = "#/dashboard";
+          }
         }
 
         if (session?.user) {

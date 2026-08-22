@@ -70,7 +70,7 @@ function LoginPage() {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: `${window.location.origin}/socialsync2.0/#/dashboard`,
+          redirectTo: `${window.location.origin}/socialsync2.0/`,
         },
       });
       if (error) {
