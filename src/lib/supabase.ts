@@ -24,7 +24,8 @@ export const supabase = createClient(
   isSupabaseConfigured() ? supabaseAnonKey : "placeholder-key",
   {
     auth: {
-      detectSessionInUrl: true,  // Required for OAuth PKCE code exchange after redirect
+      flowType: "implicit",       // Avoids PKCE code-exchange failure on static hosts
+      detectSessionInUrl: true,   // Auto-detect session token from URL hash after OAuth
       persistSession: true,
       autoRefreshToken: isSupabaseConfigured(),
     },
