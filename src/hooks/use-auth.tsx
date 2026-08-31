@@ -99,33 +99,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
-    // Only intercept hash-based auth errors (e.g. expired password-reset links).
-    // OAuth errors (e.g. "Unable to exchange external code") should show a toast
-    // and redirect to login — NOT to forgot-password.
+    // Handle hash-based auth errors ONLY for email magic links / password reset links.
+    // Google sign-in no longer uses a redirect — it uses GIS popup + signInWithIdToken —
+    // so there are no OAuth hash errors to catch here anymore.
     const rawHash = window.location.hash;
-    if (
-      rawHash.includes("error_code=") ||
-      rawHash.includes("error_description=")
-    ) {
+    if (rawHash.includes("error_description=") && !rawHash.includes("error=server_error")) {
       const match = rawHash.match(/error_description=([^&]+)/);
       const desc = match
         ? decodeURIComponent(match[1].replace(/\+/g, " "))
-        : "Authentication failed";
-
-      const isOAuthError =
-        desc.toLowerCase().includes("exchange") ||
-        desc.toLowerCase().includes("external code") ||
-        rawHash.includes("error=server_error");
-
-      if (isOAuthError) {
-        toast.error(`Google sign-in failed: ${desc}. Please try again.`);
-        // Clean URL and redirect to login
-        window.history.replaceState(null, "", `${window.location.pathname}`);
-        window.location.hash = "#/login";
-      } else {
-        toast.error(`Auth Notice: ${desc}. Please request a new link.`);
-        window.history.replaceState(null, "", `${window.location.pathname}#/forgot-password`);
-      }
+        : "Email link is invalid or has expired";
+      toast.error(`Auth Notice: ${desc}. Please request a new link.`);
+      window.history.replaceState(null, "", `${window.location.pathname}#/forgot-password`);
     }
 
     if (!configured) {
@@ -133,6 +117,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    // Initialise session from storage / URL code (detectSessionInUrl handles PKCE exchange).
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
@@ -143,33 +128,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      setSession(session);
+      setUser(session?.user ?? null);
 
-        if (event === "PASSWORD_RECOVERY") {
-          toast.info("Password recovery session active. Please enter your new password below.");
-          window.location.hash = "#/settings";
-        }
+      if (event === "PASSWORD_RECOVERY") {
+        toast.info("Password recovery session active. Please enter your new password below.");
+        window.location.hash = "#/settings";
+      }
 
-        // After Google/OAuth sign-in, navigate to dashboard
-        if (event === "SIGNED_IN" && session?.user) {
-          // Only redirect if we're on the root or a bare callback URL (not already on a route)
-          const currentHash = window.location.hash;
-          if (!currentHash || currentHash === "#" || currentHash === "#/") {
-            window.location.hash = "#/dashboard";
-          }
-        }
-
-        if (session?.user) {
-          fetchProfile(session.user).finally(() => setLoading(false));
-        } else {
-          setProfile(null);
-          setLoading(false);
+      // After Google/OAuth sign-in (GIS popup → signInWithIdToken), navigate to dashboard.
+      if (event === "SIGNED_IN" && session?.user) {
+        const currentHash = window.location.hash;
+        // Only redirect if we're on the root / a non-app route (avoid mid-session redirects)
+        if (!currentHash || currentHash === "#" || currentHash === "#/" || currentHash === "#/login" || currentHash === "#/signup") {
+          window.location.hash = "#/dashboard";
         }
       }
-    );
+
+      if (session?.user) {
+        fetchProfile(session.user).finally(() => setLoading(false));
+      } else {
+        setProfile(null);
+        setLoading(false);
+      }
+    });
 
     return () => {
       subscription.unsubscribe();

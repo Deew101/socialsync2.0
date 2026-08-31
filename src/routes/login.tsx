@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
+import { googleSignIn } from "@/lib/google-auth";
 
 export const Route = createFileRoute("/login")({
   head: () => ({ meta: [{ title: "Sign in — SocialSync 2.0" }] }),
@@ -67,15 +68,11 @@ function LoginPage() {
     }
     setGoogleLoading(true);
     try {
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: {
-          redirectTo: `${window.location.origin}/socialsync2.0/`,
-        },
-      });
+      const { error } = await googleSignIn();
       if (error) {
-        toast.error(error.message);
+        toast.error(error);
       }
+      // On success: onAuthStateChange in use-auth.tsx fires SIGNED_IN → navigates to dashboard
     } catch (err: any) {
       toast.error(err?.message || "Failed to initialize Google Sign In");
     } finally {

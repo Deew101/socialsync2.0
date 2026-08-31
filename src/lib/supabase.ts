@@ -24,8 +24,11 @@ export const supabase = createClient(
   isSupabaseConfigured() ? supabaseAnonKey : "placeholder-key",
   {
     auth: {
-      flowType: "implicit",       // Avoids PKCE code-exchange failure on static hosts
-      detectSessionInUrl: true,   // Auto-detect session token from URL hash after OAuth
+      // PKCE (default) is correct for hash-router SPAs:
+      // the callback code goes in ?code= (query string), not #hash,
+      // so it does not conflict with the TanStack hash router.
+      flowType: "pkce",
+      detectSessionInUrl: true,
       persistSession: true,
       autoRefreshToken: isSupabaseConfigured(),
     },
