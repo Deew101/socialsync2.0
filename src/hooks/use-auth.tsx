@@ -2,6 +2,7 @@ import { useEffect, useState, createContext, useContext, ReactNode } from "react
 import { User, Session } from "@supabase/supabase-js";
 import { toast } from "sonner";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
+import { handleGoogleCallbackIfPresent } from "@/lib/google-pkce-auth";
 
 export type UserProfile = {
   id: string;
@@ -116,6 +117,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false);
       return;
     }
+
+    // Handle Google PKCE callback if ?code=...&state=google_signin is in the URL.
+    // This runs when Google redirects back to our site after the user logs in.
+    // It exchanges the code, gets an id_token, and calls signInWithIdToken.
+    // onAuthStateChange below will fire SIGNED_IN once the session is established.
+    handleGoogleCallbackIfPresent().catch(console.error);
 
     // Initialise session from storage / URL code (detectSessionInUrl handles PKCE exchange).
     supabase.auth.getSession().then(({ data: { session } }) => {
