@@ -101,8 +101,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     // Handle hash-based auth errors ONLY for email magic links / password reset links.
-    // Google sign-in no longer uses a redirect — it uses GIS popup + signInWithIdToken —
-    // so there are no OAuth hash errors to catch here anymore.
     const rawHash = window.location.hash;
     if (rawHash.includes("error_description=") && !rawHash.includes("error=server_error")) {
       const match = rawHash.match(/error_description=([^&]+)/);
@@ -118,14 +116,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    // Handle Google PKCE callback if ?code=...&state=google_signin is in the URL.
-    // This runs when Google redirects back to our site after the user logs in.
-    // It exchanges the code, gets an id_token, and calls signInWithIdToken.
-    // onAuthStateChange below will fire SIGNED_IN once the session is established.
-    handleGoogleCallbackIfPresent().catch(console.error);
+    const init = async () => {
+      // ── Google PKCE callback ──────────────────────────────────────────────
+      // MUST be awaited before getSession() so signInWithIdToken completes
+      // and Supabase persists the session BEFORE we read it.
+      try {
+        const wasCallback = await handleGoogleCallbackIfPresent();
+        if (wasCallback) {
+          // Brief pause to let Supabase flush the session to storage
+          await new Promise<void>((r) => setTimeout(r, 150));
+        }
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : "Google sign-in failed";
+        console.error("[use-auth] Google callback error:", msg);
+        toast.error(`${msg}. Please try again.`);
+        window.location.hash = "#/login";
+      }
 
-    // Initialise session from storage / URL code (detectSessionInUrl handles PKCE exchange).
-    supabase.auth.getSession().then(({ data: { session } }) => {
+      // ── Read session (now includes any session from the callback above) ──
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
@@ -133,6 +144,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } else {
         setLoading(false);
       }
+    };
+
+    init().catch((err) => {
+      console.error("[use-auth] init error:", err);
+      setLoading(false);
     });
 
     const {
@@ -146,11 +162,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         window.location.hash = "#/settings";
       }
 
-      // After Google/OAuth sign-in (GIS popup → signInWithIdToken), navigate to dashboard.
+      // After Google PKCE sign-in, navigate to dashboard.
       if (event === "SIGNED_IN" && session?.user) {
         const currentHash = window.location.hash;
-        // Only redirect if we're on the root / a non-app route (avoid mid-session redirects)
-        if (!currentHash || currentHash === "#" || currentHash === "#/" || currentHash === "#/login" || currentHash === "#/signup") {
+        if (
+          !currentHash ||
+          currentHash === "#" ||
+          currentHash === "#/" ||
+          currentHash === "#/login" ||
+          currentHash === "#/signup"
+        ) {
           window.location.hash = "#/dashboard";
         }
       }

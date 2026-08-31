@@ -137,14 +137,14 @@ export async function handleGoogleCallbackIfPresent(): Promise<boolean> {
     const tokens = await tokenRes.json();
 
     if (tokens.error) {
-      console.error("[google-pkce] Token exchange error:", tokens.error, tokens.error_description);
-      return true;
+      const errMsg = tokens.error_description || tokens.error;
+      console.error("[google-pkce] Token exchange error:", tokens.error, errMsg);
+      throw new Error(`Google token exchange failed: ${errMsg}`);
     }
 
     const idToken: string | undefined = tokens.id_token;
     if (!idToken) {
-      console.error("[google-pkce] No id_token in token response.");
-      return true;
+      throw new Error("Google did not return an ID token. Please try again.");
     }
 
     console.debug("[google-pkce] Got id_token — calling supabase.auth.signInWithIdToken");
@@ -155,11 +155,13 @@ export async function handleGoogleCallbackIfPresent(): Promise<boolean> {
 
     if (error) {
       console.error("[google-pkce] signInWithIdToken error:", error.message);
-    } else {
-      console.debug("[google-pkce] Sign-in successful!");
+      throw new Error(error.message);
     }
+
+    console.debug("[google-pkce] Sign-in successful!");
   } catch (err) {
-    console.error("[google-pkce] Unexpected error during token exchange:", err);
+    // Re-throw so use-auth.tsx init() can catch it and show a toast
+    throw err;
   }
 
   return true;
