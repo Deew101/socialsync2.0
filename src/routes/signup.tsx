@@ -144,15 +144,10 @@ function SignupPage() {
           type="button"
           variant="outline"
           disabled={loading || googleLoading}
-          onClick={async () => {
-            if (!isSupabaseConfigured()) { return; }
+          onClick={() => {
+            if (!isSupabaseConfigured()) return;
             setGoogleLoading(true);
-            try { await startGoogleSignIn(); }
-            catch (err: any) {
-              const { toast } = await import("sonner");
-              toast.error(err?.message || "Could not start Google sign-up.");
-              setGoogleLoading(false);
-            }
+            startGoogleSignIn(); // redirects the page
           }}
           className="w-full"
         >

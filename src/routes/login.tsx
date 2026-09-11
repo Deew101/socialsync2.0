@@ -129,15 +129,10 @@ function LoginPage() {
           type="button"
           variant="outline"
           disabled={loading || googleLoading}
-          onClick={async () => {
-            if (!isSupabaseConfigured()) { return; }
+          onClick={() => {
+            if (!isSupabaseConfigured()) return;
             setGoogleLoading(true);
-            try { await startGoogleSignIn(); }
-            catch (err: any) {
-              const { toast } = await import("sonner");
-              toast.error(err?.message || "Could not start Google sign-in.");
-              setGoogleLoading(false);
-            }
+            startGoogleSignIn(); // redirects the page — googleLoading shows spinner until redirect
           }}
           className="w-full"
         >
