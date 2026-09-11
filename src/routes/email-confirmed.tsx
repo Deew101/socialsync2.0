@@ -16,7 +16,23 @@ function EmailConfirmedPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Exchange the code that main.tsx stored from the ?code= query param
+    // 1. Check if tokens were stashed from Supabase hash redirect (#access_token=...&type=signup)
+    const pending = sessionStorage.getItem("supabase_auth_tokens_pending");
+    if (pending) {
+      sessionStorage.removeItem("supabase_auth_tokens_pending");
+      try {
+        const { accessToken, refreshToken } = JSON.parse(pending);
+        if (accessToken && refreshToken) {
+          supabase.auth
+            .setSession({ access_token: accessToken, refresh_token: refreshToken })
+            .catch(console.error);
+        }
+      } catch (e) {
+        console.error("Error parsing pending auth tokens:", e);
+      }
+    }
+
+    // 2. Exchange the code that main.tsx stored from the ?code= query param
     const code = sessionStorage.getItem("email_confirm_code");
     if (code) {
       sessionStorage.removeItem("email_confirm_code");

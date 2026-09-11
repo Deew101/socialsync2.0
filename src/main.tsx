@@ -23,10 +23,41 @@ import "./styles.css";
   window.history.replaceState(null, "", window.location.pathname);
 })();
 
-// ── Email confirmation code redirect ─────────────────────────────────────────
-// Supabase sends confirmation links to {site_url}?code=XXX
-// We intercept the ?code= here and redirect to #/email-confirmed so the
-// SPA can handle it (exchange code → confirm session → show success screen).
+// ── Supabase email confirmation / recovery hash extraction ───────────────────
+// Supabase email confirmation redirects to:
+//   https://deew101.github.io/socialsync2.0/#access_token=...&refresh_token=...&type=signup
+// Because we use TanStack hash router, #access_token=… is treated as an unknown route (404).
+// We intercept it before the router mounts, save the tokens, and route to #/email-confirmed.
+(function extractSupabaseAuthHash() {
+  const raw = window.location.hash;
+  if (!raw.includes("access_token=")) return;
+
+  const params = new URLSearchParams(raw.replace(/^#/, ""));
+  const accessToken = params.get("access_token");
+  const refreshToken = params.get("refresh_token");
+  const type = params.get("type");
+
+  if (accessToken && refreshToken) {
+    sessionStorage.setItem(
+      "supabase_auth_tokens_pending",
+      JSON.stringify({ accessToken, refreshToken, type })
+    );
+
+    if (type === "signup" || type === "email_change") {
+      window.location.hash = "#/email-confirmed";
+      return;
+    }
+    if (type === "recovery") {
+      window.location.hash = "#/settings";
+      return;
+    }
+    window.location.hash = "#/email-confirmed";
+  }
+})();
+
+// ── Email confirmation code redirect (?code=...) ─────────────────────────────
+// When Supabase sends confirmation links using PKCE (?code=XXX)
+// We intercept the ?code= here and redirect to #/email-confirmed
 (function handleEmailConfirmCode() {
   const search = window.location.search;
   if (!search.includes("code=")) return;
@@ -39,7 +70,7 @@ import "./styles.css";
 
   // Store the code and redirect into the SPA
   sessionStorage.setItem("email_confirm_code", code);
-  // Rewrite URL to the email-confirmed hash route (keeps the code in storage)
+  // Rewrite URL to the email-confirmed hash route
   window.history.replaceState(null, "", window.location.pathname + "#/email-confirmed");
 })();
 
