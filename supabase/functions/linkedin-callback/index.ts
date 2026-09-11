@@ -126,31 +126,35 @@ Deno.serve(async (req: Request) => {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
   );
 
-  if (userId) {
-    const { error: dbError } = await supabase
-      .from("social_accounts")
-      .upsert(
-        {
-          user_id: userId,
-          platform: "linkedin",
-          platform_user_id: platformUserId,
-          handle,
-          display_name: displayName,
-          profile_image_url: profileImageUrl,
-          access_token: accessToken,
-          expires_at: expiresAt,
-          connected: true,
-          can_publish: true,
-          followers_count: 0, // LinkedIn basic OAuth doesn't provide follower count
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "user_id,platform" }
-      );
+  if (!userId) {
+    return redirectError(
+      "User ID was missing from OAuth state. Please ensure you are logged into SocialSync before connecting."
+    );
+  }
 
-    if (dbError) {
-      console.error("DB upsert error:", dbError.message);
-      // Non-fatal: redirect with success anyway so the user knows OAuth worked
-    }
+  const { error: dbError } = await supabase
+    .from("social_accounts")
+    .upsert(
+      {
+        user_id: userId,
+        platform: "linkedin",
+        platform_user_id: platformUserId,
+        handle,
+        display_name: displayName,
+        profile_image_url: profileImageUrl,
+        access_token: accessToken,
+        expires_at: expiresAt,
+        connected: true,
+        can_publish: true,
+        followers_count: 0, // LinkedIn basic OAuth doesn't provide follower count
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "user_id,platform" }
+    );
+
+  if (dbError) {
+    console.error("DB upsert error:", dbError.message);
+    return redirectError(`Database error saving account: ${dbError.message}`);
   }
 
   // 6. Redirect back to SocialSync app — params go inside hash fragment (hash router)
