@@ -12,6 +12,27 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/hooks/use-auth";
 
 function NotFoundComponent() {
+  // Safety fallback: if an auth redirect arrived on an unmapped hash/query,
+  // route to the appropriate handler instead of showing 404
+  const hash = window.location.hash || "";
+  const search = window.location.search || "";
+
+  if (
+    hash.includes("access_token=") &&
+    (hash.includes("type=signup") || hash.includes("type=email_change"))
+  ) {
+    window.location.hash = "#/email-confirmed";
+    return null;
+  }
+  if (hash.includes("access_token=") && hash.includes("type=recovery")) {
+    window.location.hash = "#/settings";
+    return null;
+  }
+  if (search.includes("code=") && !search.includes("state=google_signin")) {
+    window.location.hash = "#/email-confirmed";
+    return null;
+  }
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="max-w-md text-center">

@@ -43,15 +43,14 @@ import "./styles.css";
       JSON.stringify({ accessToken, refreshToken, type })
     );
 
-    if (type === "signup" || type === "email_change") {
-      window.location.hash = "#/email-confirmed";
-      return;
-    }
-    if (type === "recovery") {
-      window.location.hash = "#/settings";
-      return;
-    }
-    window.location.hash = "#/email-confirmed";
+    const basePath = window.location.pathname.endsWith("/")
+      ? window.location.pathname
+      : window.location.pathname + "/";
+
+    const targetRoute =
+      type === "recovery" ? "#/settings" : "#/email-confirmed";
+
+    window.history.replaceState(null, "", basePath + targetRoute);
   }
 })();
 
@@ -70,8 +69,12 @@ import "./styles.css";
 
   // Store the code and redirect into the SPA
   sessionStorage.setItem("email_confirm_code", code);
+  const basePath = window.location.pathname.endsWith("/")
+    ? window.location.pathname
+    : window.location.pathname + "/";
+
   // Rewrite URL to the email-confirmed hash route
-  window.history.replaceState(null, "", window.location.pathname + "#/email-confirmed");
+  window.history.replaceState(null, "", basePath + "#/email-confirmed");
 })();
 
 const router = getRouter();
