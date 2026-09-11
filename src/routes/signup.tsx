@@ -46,6 +46,7 @@ function SignupPage() {
         email: email.trim(),
         password,
         options: {
+          emailRedirectTo: `${window.location.origin}/socialsync2.0/`,
           data: {
             full_name: finalName,
             name: finalName,

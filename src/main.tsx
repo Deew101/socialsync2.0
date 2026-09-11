@@ -23,6 +23,26 @@ import "./styles.css";
   window.history.replaceState(null, "", window.location.pathname);
 })();
 
+// ── Email confirmation code redirect ─────────────────────────────────────────
+// Supabase sends confirmation links to {site_url}?code=XXX
+// We intercept the ?code= here and redirect to #/email-confirmed so the
+// SPA can handle it (exchange code → confirm session → show success screen).
+(function handleEmailConfirmCode() {
+  const search = window.location.search;
+  if (!search.includes("code=")) return;
+  // Don't steal Google's ?code= (which has state=google_signin in query)
+  if (search.includes("state=google_signin")) return;
+
+  const params = new URLSearchParams(search);
+  const code = params.get("code");
+  if (!code) return;
+
+  // Store the code and redirect into the SPA
+  sessionStorage.setItem("email_confirm_code", code);
+  // Rewrite URL to the email-confirmed hash route (keeps the code in storage)
+  window.history.replaceState(null, "", window.location.pathname + "#/email-confirmed");
+})();
+
 const router = getRouter();
 
 const rootElement = document.getElementById("root");

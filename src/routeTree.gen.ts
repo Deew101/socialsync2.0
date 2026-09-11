@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppRouteImport } from './routes/_app'
+import { Route as EmailConfirmedRouteImport } from './routes/email-confirmed'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as OauthCallbackRouteImport } from './routes/oauth-callback'
@@ -33,6 +34,11 @@ const IndexRoute = IndexRouteImport.update({
 } as any)
 const AppRoute = AppRouteImport.update({
   id: '/_app',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const EmailConfirmedRoute = EmailConfirmedRouteImport.update({
+  id: '/email-confirmed',
+  path: '/email-confirmed',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
@@ -108,6 +114,7 @@ const AppSettingsRoute = AppSettingsRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/email-confirmed': typeof EmailConfirmedRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
   '/oauth-callback': typeof OauthCallbackRoute
@@ -125,6 +132,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/email-confirmed': typeof EmailConfirmedRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
   '/oauth-callback': typeof OauthCallbackRoute
@@ -144,6 +152,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_app': typeof AppRouteWithChildren
+  '/email-confirmed': typeof EmailConfirmedRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
   '/oauth-callback': typeof OauthCallbackRoute
@@ -163,6 +172,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/email-confirmed'
     | '/forgot-password'
     | '/login'
     | '/oauth-callback'
@@ -180,6 +190,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/email-confirmed'
     | '/forgot-password'
     | '/login'
     | '/oauth-callback'
@@ -198,6 +209,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/_app'
+    | '/email-confirmed'
     | '/forgot-password'
     | '/login'
     | '/oauth-callback'
@@ -217,6 +229,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AppRoute: typeof AppRouteWithChildren
+  EmailConfirmedRoute: typeof EmailConfirmedRoute
   ForgotPasswordRoute: typeof ForgotPasswordRoute
   LoginRoute: typeof LoginRoute
   OauthCallbackRoute: typeof OauthCallbackRoute
@@ -237,6 +250,13 @@ declare module '@tanstack/react-router' {
       path: ''
       fullPath: '/'
       preLoaderRoute: typeof AppRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/email-confirmed': {
+      id: '/email-confirmed'
+      path: '/email-confirmed'
+      fullPath: '/email-confirmed'
+      preLoaderRoute: typeof EmailConfirmedRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/forgot-password': {
@@ -371,6 +391,7 @@ const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AppRoute: AppRouteWithChildren,
+  EmailConfirmedRoute: EmailConfirmedRoute,
   ForgotPasswordRoute: ForgotPasswordRoute,
   LoginRoute: LoginRoute,
   OauthCallbackRoute: OauthCallbackRoute,
