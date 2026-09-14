@@ -42,30 +42,40 @@ function randomBase64url(len = 32): string {
     .replace(/=/g, "");
 }
 
+async function sha256Hex(str: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(str);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 /**
  * Redirect the user to Google's sign-in page.
- * Uses implicit id_token flow — no client_secret needed.
+ * Uses implicit id_token flow — sends SHA-256 hashed nonce to Google,
+ * and preserves the raw nonce for Supabase's signInWithIdToken handshake.
  */
-export function startGoogleSignIn(): void {
+export async function startGoogleSignIn(): Promise<void> {
   if (!CLIENT_ID) {
     toast.error("Google Client ID not configured.");
     return;
   }
 
-  const nonce = randomBase64url(32);
+  const rawNonce = randomBase64url(32);
+  const hashedNonce = await sha256Hex(rawNonce);
   const state = GOOGLE_STATE_VALUE;
 
-  sessionStorage.setItem(SESSION_KEY_NONCE, nonce);
+  sessionStorage.setItem(SESSION_KEY_NONCE, rawNonce);
   sessionStorage.setItem(SESSION_KEY_STATE, state);
 
   const params = new URLSearchParams({
     client_id: CLIENT_ID,
     redirect_uri: REDIRECT_URI,
-    response_type: "id_token",   // implicit — token in hash, no server exchange
+    response_type: "id_token", // implicit — token in hash, no server exchange
     scope: "openid profile email",
-    nonce,
+    nonce: hashedNonce, // Google embeds the hashed nonce in id_token
     state,
     prompt: "select_account",
   });
