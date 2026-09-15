@@ -162,25 +162,34 @@ Deno.serve(async (req: Request) => {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
   );
 
-  if (userId) {
-    await supabase.from("social_accounts").upsert(
-      {
-        user_id: userId,
-        platform: "instagram",
-        platform_user_id: igUserId,
-        handle: igUsername,
-        display_name: displayName,
-        profile_image_url: igProfilePic || null,
-        access_token: longLivedToken,
-        expires_at: expiresAt,
-        connected: true,
-        can_publish: canPublish,
-        publish_note: publishNote,
-        followers_count: igFollowers,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "user_id,platform" }
+  if (!userId) {
+    return redirectError(
+      "User ID was missing from OAuth state. Please ensure you are logged into SocialSync before connecting."
     );
+  }
+
+  const { error: dbError } = await supabase.from("social_accounts").upsert(
+    {
+      user_id: userId,
+      platform: "instagram",
+      platform_user_id: igUserId,
+      handle: igUsername,
+      display_name: displayName,
+      profile_image_url: igProfilePic || null,
+      access_token: longLivedToken,
+      expires_at: expiresAt,
+      connected: true,
+      can_publish: canPublish,
+      publish_note: publishNote,
+      followers_count: igFollowers,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "user_id,platform" }
+  );
+
+  if (dbError) {
+    console.error("DB upsert error:", dbError.message);
+    return redirectError(`Database error saving account: ${dbError.message}`);
   }
 
   return new Response(null, {
