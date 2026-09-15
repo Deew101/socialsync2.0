@@ -68,20 +68,19 @@ export function initiateInstagramOAuth(userId: string) {
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL ?? "";
   const redirectUri = `${supabaseUrl}/functions/v1/instagram-callback`;
 
+  // Modern Instagram API scopes for professional/creator publishing
   const scope = [
-    "instagram_basic",
-    "instagram_content_publish",
-    "pages_show_list",
-    "pages_read_engagement",
+    "instagram_business_basic",
+    "instagram_business_content_publish",
   ].join(",");
 
   const authUrl =
-    `https://www.facebook.com/v19.0/dialog/oauth` +
+    `https://api.instagram.com/oauth/authorize` +
     `?client_id=${encodeURIComponent(appId)}` +
     `&redirect_uri=${encodeURIComponent(redirectUri)}` +
-    `&state=${encodeURIComponent(state)}` +
+    `&response_type=code` +
     `&scope=${encodeURIComponent(scope)}` +
-    `&response_type=code`;
+    `&state=${encodeURIComponent(state)}`;
 
   window.location.href = authUrl;
 }

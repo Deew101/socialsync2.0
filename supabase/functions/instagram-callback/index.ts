@@ -1,22 +1,9 @@
 /**
  * Supabase Edge Function: instagram-callback
  *
- * OAuth redirect URI for Meta/Instagram.
+ * OAuth redirect URI for Instagram.
+ * Supports modern Instagram API with Instagram Login, with fallback to Facebook Graph API.
  * Keeps META_APP_SECRET server-side — never exposed to the browser.
- *
- * Flow:
- *   1. Meta redirects here with ?code=...&state=...
- *   2. Exchange code for short-lived Facebook user access token
- *   3. Exchange for long-lived token (valid 60 days)
- *   4. Get linked Instagram Business/Creator account via Graph API
- *   5. Save real account data to social_accounts table
- *   6. Redirect back to SocialSync app with result
- *
- * Required Edge Function secrets:
- *   META_APP_ID               — your Meta app ID (same as VITE_META_APP_ID)
- *   META_APP_SECRET           — your Meta app's secret
- *   SUPABASE_URL              — auto-provided
- *   SUPABASE_SERVICE_ROLE_KEY — auto-provided
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -26,7 +13,9 @@ Deno.serve(async (req: Request) => {
   const url = new URL(req.url);
   const FUNCTION_URL = `${Deno.env.get("SUPABASE_URL")}/functions/v1/instagram-callback`;
 
-  const code = url.searchParams.get("code");
+  const rawCode = url.searchParams.get("code");
+  // Instagram OAuth quirk: strip trailing #_ if present
+  const code = rawCode ? rawCode.replace(/#_$/, "") : null;
   const state = url.searchParams.get("state") ?? "";
   const oauthError = url.searchParams.get("error");
   const oauthErrorDescription = url.searchParams.get("error_description");
@@ -40,7 +29,7 @@ Deno.serve(async (req: Request) => {
     });
 
   if (oauthError) return redirectError(oauthErrorDescription ?? oauthError);
-  if (!code) return redirectError("No authorization code received from Meta.");
+  if (!code) return redirectError("No authorization code received from Instagram.");
 
   const stateParts = state.split(":");
   const userId = stateParts.length >= 3 ? stateParts.slice(2).join(":") : null;
@@ -55,12 +44,80 @@ Deno.serve(async (req: Request) => {
     );
   }
 
-  // Step 1: Exchange code for short-lived Facebook user access token
-  let shortLivedToken: string;
+  let accessToken = "";
+  let expiresAt = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString();
+  let igUserId = "";
+  let igUsername = "";
+  let igFollowers: number | null = null;
+  let igProfilePic = "";
+  let canPublish = true;
+  let publishNote: string | null = null;
+
+  // Step 1: Attempt code exchange via Instagram OAuth endpoint (modern Instagram API)
+  let usedInstagramApi = false;
   try {
-    const tokenRes = await fetch(
-      "https://graph.facebook.com/v19.0/oauth/access_token",
-      {
+    const tokenRes = await fetch("https://api.instagram.com/oauth/access_token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_id: appId,
+        client_secret: appSecret,
+        grant_type: "authorization_code",
+        redirect_uri: FUNCTION_URL,
+        code,
+      }),
+    });
+
+    if (tokenRes.ok) {
+      const data = await tokenRes.json();
+      const shortLivedToken = data.access_token;
+      igUserId = String(data.user_id ?? "");
+      usedInstagramApi = true;
+
+      // Upgrade to 60-day long-lived token via graph.instagram.com
+      try {
+        const llRes = await fetch(
+          `https://graph.instagram.com/access_token?grant_type=ig_exchange_token&client_secret=${encodeURIComponent(appSecret)}&access_token=${encodeURIComponent(shortLivedToken)}`
+        );
+        if (llRes.ok) {
+          const llData = await llRes.json();
+          accessToken = llData.access_token ?? shortLivedToken;
+          const expiresIn: number = llData.expires_in ?? 5184000;
+          expiresAt = new Date(Date.now() + expiresIn * 1000).toISOString();
+        } else {
+          accessToken = shortLivedToken;
+        }
+      } catch {
+        accessToken = shortLivedToken;
+      }
+
+      // Fetch user profile from Instagram Graph API
+      try {
+        const meRes = await fetch(
+          `https://graph.instagram.com/v21.0/me?fields=user_id,username,name,profile_picture_url,account_type&access_token=${encodeURIComponent(accessToken)}`
+        );
+        if (meRes.ok) {
+          const meData = await meRes.json();
+          igUserId = meData.id ?? meData.user_id ?? igUserId;
+          igUsername = meData.username ?? meData.name ?? "Instagram User";
+          igProfilePic = meData.profile_picture_url ?? "";
+          if (meData.account_type && meData.account_type !== "BUSINESS" && meData.account_type !== "CREATOR") {
+            canPublish = false;
+            publishNote = "Personal account detected. Upgrade to Creator or Business in Instagram settings to enable publishing.";
+          }
+        }
+      } catch (err) {
+        console.warn("Instagram profile fetch error:", err);
+      }
+    }
+  } catch (err) {
+    console.warn("api.instagram.com error:", err);
+  }
+
+  // Step 2: Fallback to Facebook Graph API if Instagram direct exchange didn't succeed
+  if (!usedInstagramApi) {
+    try {
+      const fbTokenRes = await fetch("https://graph.facebook.com/v19.0/oauth/access_token", {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams({
@@ -69,94 +126,69 @@ Deno.serve(async (req: Request) => {
           redirect_uri: FUNCTION_URL,
           code,
         }),
+      });
+
+      if (!fbTokenRes.ok) {
+        const body = await fbTokenRes.text();
+        return redirectError(`Token exchange failed: ${body}`);
       }
-    );
 
-    if (!tokenRes.ok) {
-      const body = await tokenRes.text();
-      return redirectError(`Token exchange failed: ${body}`);
-    }
-    const data = await tokenRes.json();
-    shortLivedToken = data.access_token;
-  } catch (err) {
-    return redirectError(`Token exchange error: ${String(err)}`);
-  }
+      const fbData = await fbTokenRes.json();
+      const shortLived = fbData.access_token;
+      accessToken = shortLived;
 
-  // Step 2: Upgrade to long-lived token (valid 60 days)
-  let longLivedToken = shortLivedToken;
-  let expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
-  try {
-    const llRes = await fetch(
-      `https://graph.facebook.com/v19.0/oauth/access_token` +
-        `?grant_type=fb_exchange_token` +
-        `&client_id=${appId}` +
-        `&client_secret=${appSecret}` +
-        `&fb_exchange_token=${shortLivedToken}`
-    );
-    if (llRes.ok) {
-      const data = await llRes.json();
-      longLivedToken = data.access_token ?? shortLivedToken;
-      const expiresIn: number = data.expires_in ?? 5184000;
-      expiresAt = new Date(Date.now() + expiresIn * 1000).toISOString();
-    }
-  } catch {
-    // Non-fatal: use short-lived token as fallback
-  }
+      // Upgrade to long-lived
+      try {
+        const llRes = await fetch(
+          `https://graph.facebook.com/v19.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${appId}&client_secret=${appSecret}&fb_exchange_token=${shortLived}`
+        );
+        if (llRes.ok) {
+          const llData = await llRes.json();
+          accessToken = llData.access_token ?? shortLived;
+          const expiresIn: number = llData.expires_in ?? 5184000;
+          expiresAt = new Date(Date.now() + expiresIn * 1000).toISOString();
+        }
+      } catch {
+        // use short lived token
+      }
 
-  // Step 3: Find linked Instagram Business/Creator account
-  let igUserId = "";
-  let igUsername = "";
-  let igFollowers = 0;
-  let igProfilePic = "";
-  let canPublish = false;
-  let publishNote: string | null = null;
-
-  try {
-    // Get Facebook pages linked to this account
-    const pagesRes = await fetch(
-      `https://graph.facebook.com/v19.0/me/accounts` +
-        `?fields=id,name,instagram_business_account` +
-        `&access_token=${longLivedToken}`
-    );
-    const pagesData = await pagesRes.json();
-    const pages: any[] = pagesData.data ?? [];
-
-    // Find a page with a linked Instagram Business account
-    const pageWithIg = pages.find((p: any) => p.instagram_business_account);
-
-    if (pageWithIg?.instagram_business_account?.id) {
-      const igId = pageWithIg.instagram_business_account.id;
-      const igRes = await fetch(
-        `https://graph.facebook.com/v19.0/${igId}` +
-          `?fields=id,username,followers_count,profile_picture_url` +
-          `&access_token=${longLivedToken}`
+      // Check linked IG business account
+      const pagesRes = await fetch(
+        `https://graph.facebook.com/v19.0/me/accounts?fields=id,name,instagram_business_account&access_token=${accessToken}`
       );
-      const igData = await igRes.json();
-      igUserId = igData.id ?? igId;
-      igUsername = igData.username ?? "";
-      igFollowers = igData.followers_count ?? 0;
-      igProfilePic = igData.profile_picture_url ?? "";
-      canPublish = true;
-    } else {
-      // No Business/Creator account linked to a Facebook page
-      // Get basic info for display only
-      const meRes = await fetch(
-        `https://graph.facebook.com/v19.0/me?fields=id,name&access_token=${longLivedToken}`
-      );
-      const meData = await meRes.json();
-      igUserId = meData.id ?? "";
-      igUsername = meData.name ?? "Instagram User";
-      canPublish = false;
-      publishNote =
-        "No Business/Creator account found. Connect your Instagram to a Facebook Page to enable publishing.";
+      const pagesData = await pagesRes.json();
+      const pages: any[] = pagesData.data ?? [];
+      const pageWithIg = pages.find((p: any) => p.instagram_business_account);
+
+      if (pageWithIg?.instagram_business_account?.id) {
+        const igId = pageWithIg.instagram_business_account.id;
+        const igRes = await fetch(
+          `https://graph.facebook.com/v19.0/${igId}?fields=id,username,followers_count,profile_picture_url&access_token=${accessToken}`
+        );
+        const igData = await igRes.json();
+        igUserId = igData.id ?? igId;
+        igUsername = igData.username ?? "";
+        igFollowers = igData.followers_count ?? null;
+        igProfilePic = igData.profile_picture_url ?? "";
+        canPublish = true;
+      } else {
+        const meRes = await fetch(
+          `https://graph.facebook.com/v19.0/me?fields=id,name&access_token=${accessToken}`
+        );
+        const meData = await meRes.json();
+        igUserId = meData.id ?? "";
+        igUsername = meData.name ?? "Instagram User";
+        canPublish = false;
+        publishNote = "No Business/Creator account found. Link Instagram to a Facebook Page to enable publishing.";
+      }
+    } catch (fbErr) {
+      return redirectError(`Authentication failed: ${String(fbErr)}`);
     }
-  } catch (err) {
-    return redirectError(`Failed to fetch Instagram profile: ${String(err)}`);
   }
 
   const displayName = igUsername || "Instagram User";
 
-  // Step 4: Save to Supabase
+  // Step 3: Save to Supabase
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
@@ -172,11 +204,11 @@ Deno.serve(async (req: Request) => {
     {
       user_id: userId,
       platform: "instagram",
-      platform_user_id: igUserId,
-      handle: igUsername,
+      platform_user_id: igUserId || null,
+      handle: igUsername || displayName,
       display_name: displayName,
       profile_image_url: igProfilePic || null,
-      access_token: longLivedToken,
+      access_token: accessToken,
       expires_at: expiresAt,
       connected: true,
       can_publish: canPublish,

@@ -90,7 +90,7 @@ function Accounts() {
         toast.info("Redirecting to LinkedIn…");
         initiateLinkedInOAuth(user.id);
       } else {
-        toast.info("Redirecting to Instagram / Meta…");
+        toast.info("Redirecting to Instagram…");
         initiateInstagramOAuth(user.id);
       }
     } catch (err: any) {
